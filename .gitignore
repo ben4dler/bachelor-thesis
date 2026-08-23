@@ -42,3 +42,32 @@ dist/
 .DS_Store
 Thumbs.db
 Desktop.ini
+# LaTeX auxiliary files
+/LaTeX/*.aux
+/LaTeX/*.bbl
+/LaTeX/*.bcf
+/LaTeX/*.blg
+/LaTeX/*.fdb_latexmk
+/LaTeX/*.fls
+/LaTeX/*.lof
+/LaTeX/*.lot
+/LaTeX/*.out
+/LaTeX/*.run.xml
+/LaTeX/*.synctex.gz
+/LaTeX/*.toc
+/LaTeX/*.xdv
+
+# LaTeX temporary files and editor backups
+/LaTeX/*.nav
+/LaTeX/*.snm
+/LaTeX/*.vrb
+/LaTeX/*.acn
+/LaTeX/*.acr
+/LaTeX/*.alg
+/LaTeX/*.glg
+/LaTeX/*.glo
+/LaTeX/*.gls
+/LaTeX/*.ist
+
+# Recommended: compile into a dedicated directory
+/LaTeX/build/

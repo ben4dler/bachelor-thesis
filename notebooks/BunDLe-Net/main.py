@@ -58,11 +58,11 @@ Y0_ = model.tau(X_[:,0]).numpy()
 
 algorithm = 'BunDLeNet'
 ### Save the weights (Uncomment to save and load for for later use)
-# model.save_weights('data/generated/BunDLeNet_model_worm_' + str(worm_num))
-# np.savetxt('data/generated/saved_Y/Y0__' + algorithm + '_worm_' + str(worm_num), Y0_)
-# np.savetxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num), B_)
-# Y0_ = np.loadtxt('data/generated/saved_Y/Y0__' + algorithm + '_worm_' + str(worm_num))
-# B_ = np.loadtxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num)).astype(int)
+model.save_weights('data/generated/BunDLeNet_model_worm_' + str(worm_num))
+np.savetxt('data/generated/saved_Y/Y0__' + algorithm + '_worm_' + str(worm_num), Y0_)
+np.savetxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num), B_)
+Y0_ = np.loadtxt('data/generated/saved_Y/Y0__' + algorithm + '_worm_' + str(worm_num))
+B_ = np.loadtxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num)).astype(int)
 
 ### Plotting latent space dynamics
 plot_latent_timeseries(Y0_, B_, state_names)
