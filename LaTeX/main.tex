@@ -52,4 +52,16 @@ Februar:
 Abgeben und beten
 }
 
+\section{Pipeline}
+\begin{enumerate}
+    \item EEG in ein Array laden (T, 64), T: Anzahl der Zeitpunkte (also die Zeit die vergangen ist in Sekunden oder ms), N: Anzahl der Kanäle/Neuronen (in unserem Fall 64)
+    \item Die Kanäle für alle Personen in derselben Reihenfolge herausfiltern
+    \item Die Eventmarke auf eine Label-Zeitreihe B abbilden
+    \item Die Eventklassen auf 0 bis 7 reduzieren oder die letzte Dense-Schicht anpassen
+    \item X und B zeitlich exakt synchronisieren (also Neuronen aktivität mit Label)
+    \item Danach prep\_data(X, B, win=15) aufrufen
+\end{enumerate}
+
+Bundle Net Continous anschauen, ob es besser geeignet ist für EEG Daten
+
 \end{document}
