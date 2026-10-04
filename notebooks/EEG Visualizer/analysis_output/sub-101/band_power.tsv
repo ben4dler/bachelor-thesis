@@ -1,0 +1,6 @@
+band	frequency_range_hz	mean_absolute_power_v2	mean_relative_power
+delta	1.0-4.0	1.3497e-10	0.710228
+theta	4.0-8.0	2.16912e-11	0.114141
+alpha	8.0-13.0	1.05565e-11	0.0555494
+beta	13.0-30.0	1.51483e-11	0.0797121
+gamma	30.0-45.0	7.67164e-12	0.0403691

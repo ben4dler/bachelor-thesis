@@ -62,6 +62,30 @@ Abgeben und beten
     \item Danach prep\_data(X, B, win=15) aufrufen
 \end{enumerate}
 
-Bundle Net Continous anschauen, ob es besser geeignet ist für EEG Daten
+Bundle Net Continous anschauen, ob es besser geeignet ist für EEG Daten \\
+
+
+Für BunDLe-Net gilt daher:
+
+\begin{itemize}
+    \item X = EEG-Signal über die Zeit, also Kanäle × Samples.
+    \item Die Events sind zunächst nur zeitlich punktuelle Marker.
+    \item B kann daraus abgeleitet werden, wenn du EEG-Epochen klassifizieren möchtest.
+    \item Die Events sind weder 'Inaktivität' noch direkt kontinuierliche Zuständ
+\end{itemize}
+
+Eine sinnvolle Gruppierung für state\_names wäre beispielsweise:
+
+\begin{itemize}
+    \item Fixation / kein Stimulus
+    \item Gesicht
+    \item Tier
+    \item Ort
+    \item Objekt
+    \item Catch-Trial
+    \item Button-Press
+\end{itemize}
+
+
 
 \end{document}

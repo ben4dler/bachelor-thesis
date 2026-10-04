@@ -1,0 +1,37 @@
+EEG-ANALYSEBERICHT
+==================
+
+1. Dateiaufbau
+BIDS-Datensatz: /Users/benediktadler/Documents/Uni Projekte/bachelor-thesis/data/raw/ds005363
+Subjekt/Sitzung: sub-101/ses-01
+Aufgabe: objrecog
+BrainVision-Dateien: .vhdr (Header), .eeg (Messwerte), .vmrk (Marker)
+BIDS-Sidecars: *_eeg.json (Messmetadaten), *_channels.tsv (Kanäle), *_events.tsv (Events)
+
+2. Aufnahme
+Kanäle insgesamt: 64
+EEG-Kanäle: 64
+Kanaltypen: {'eeg': 64}
+Abtastrate: 1000.000 Hz
+Anzahl Samples: 4178520
+Aufnahmedauer: 4178.520 s (69.64 min)
+Analysefenster: erste 60.000 s
+Referenz laut JSON: n/a
+Elektrodenlayout: based on the extended 10/20 system
+
+3. Kanal- und Signalbeschreibung
+Die vollständigen Kennwerte stehen in channel_statistics.tsv.
+Die Spalten mean/std/min/max/peak_to_peak sind in µV angegeben.
+
+4. Frequenzanalyse
+Die Band-Leistungen stehen in band_power.tsv.
+Berechnet wurden Delta (1–4 Hz), Theta (4–8 Hz), Alpha (8–13 Hz),
+Beta (13–30 Hz) und Gamma (30–45 Hz) aus dem Analysefenster.
+
+5. Events/Trigger
+Anzahl Event-Zeilen: 3082
+Event-Typen: {'New Segment/': 1, 'Comment/actiCAP Data On': 1, 'Stimulus/S101': 1, 'Stimulus/S 63': 32, 'Stimulus/S 11': 32, 'Stimulus/S 31': 32, 'Stimulus/S 13': 32, 'Stimulus/S 69': 118, 'Stimulus/S 99': 504, 'Stimulus/S 52': 32, 'Stimulus/S 46': 32, 'Stimulus/S 15': 32, 'Stimulus/S 66': 105, 'Stimulus/S 18': 32, 'Stimulus/S  1': 32, 'Stimulus/S 16': 32, 'Stimulus/S 20': 32, 'Stimulus/S  8': 32, 'Stimulus/S 45': 32, 'Stimulus/S 40': 32, 'Stimulus/S  9': 32, 'Stimulus/S 58': 32, 'Stimulus/S 65': 79, 'Stimulus/S 30': 32, 'Stimulus/S 12': 32, 'Stimulus/S  4': 32, 'Stimulus/S 60': 32, 'Stimulus/S 68': 97, 'Stimulus/S 25': 32, 'Stimulus/S 32': 32, 'Stimulus/S 36': 32, 'Stimulus/S  2': 32, 'Stimulus/S 29': 32, 'Stimulus/S 22': 32, 'Stimulus/S 28': 32, 'Stimulus/S 67': 113, 'Stimulus/S  6': 32, 'Stimulus/S 41': 32, 'Stimulus/S 42': 32, 'Stimulus/S 14': 32, 'Stimulus/S 43': 32, 'Stimulus/S 51': 32, 'Stimulus/S 39': 32, 'Stimulus/S 61': 32, 'Stimulus/S 21': 32, 'Stimulus/S 26': 32, 'Stimulus/S 23': 32, 'Stimulus/S 10': 32, 'Stimulus/S 44': 32, 'Stimulus/S 62': 32, 'Stimulus/S 59': 32, 'Stimulus/S 34': 32, 'Stimulus/S  7': 32, 'Stimulus/S 48': 32, 'Stimulus/S 47': 32, 'Stimulus/S 56': 32, 'Stimulus/S 33': 32, 'Stimulus/S 49': 32, 'Stimulus/S 64': 32, 'Stimulus/S 55': 32, 'Stimulus/S 53': 32, 'Stimulus/S 57': 32, 'Stimulus/S 17': 32, 'Stimulus/S 24': 32, 'Stimulus/S  3': 32, 'Stimulus/S 19': 32, 'Stimulus/S 38': 32, 'Stimulus/S 50': 32, 'Stimulus/S 27': 32, 'Stimulus/S 35': 32, 'Stimulus/S 54': 32, 'Stimulus/S 37': 32, 'Stimulus/S  5': 32, 'Stimulus/S199': 8, 'Stimulus/S102': 1, 'Stimulus/S103': 1, 'Stimulus/S104': 1, 'Stimulus/S105': 1, 'Stimulus/S106': 1, 'Stimulus/S107': 1, 'Stimulus/S108': 1}
+Die Trigger werden aus *_events.tsv übernommen; ihre Codes werden nicht interpretiert.
+
+Hinweis: Die Auswertung ist deskriptiv und ersetzt keine Vorverarbeitung.
+Insbesondere wurden keine Filterung und keine Artefaktkorrektur durchgeführt.
