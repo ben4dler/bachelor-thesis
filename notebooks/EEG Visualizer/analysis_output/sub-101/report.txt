@@ -2,7 +2,7 @@ EEG-ANALYSEBERICHT
 ==================
 
 1. Dateiaufbau
-BIDS-Datensatz: /Users/benediktadler/Documents/Uni Projekte/bachelor-thesis/data/raw/ds005363
+BIDS-Datensatz: D:\Uni\bachelor-thesis\data\raw\ds005363
 Subjekt/Sitzung: sub-101/ses-01
 Aufgabe: objrecog
 BrainVision-Dateien: .vhdr (Header), .eeg (Messwerte), .vmrk (Marker)
