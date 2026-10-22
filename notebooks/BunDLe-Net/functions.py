@@ -5,6 +5,12 @@ import numpy as np
 import seaborn as sns
 from tqdm import tqdm
 from scipy import signal
+from pathlib import Path
+import csv
+import json
+import mne
+import argparse
+from typing import Any, Iterable
 from matplotlib import cm
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
@@ -52,121 +58,157 @@ class Database:
                             inter or motor neuron. 
 
     """
-    def __init__(self, data_set_no):
-        self.data_set_no = data_set_no
-        data_dict = mat73.loadmat('data/raw/NoStim_Data.mat')
-        data  = data_dict['NoStim_Data']
+    def __init__(self):
+        PROJECT_ROOT = Path.cwd().resolve()
 
-        deltaFOverF_bc = data['deltaFOverF_bc'][self.data_set_no]
-        derivatives = data['derivs'][self.data_set_no]
-        NeuronNames = data['NeuronNames'][self.data_set_no]
-        fps = data['fps'][self.data_set_no]
-        States = data['States'][self.data_set_no]
+        # Nach oben gehen, bis das Datenverzeichnis gefunden wird
+        while not (PROJECT_ROOT / "data" / "raw" / "ds005363").is_dir():
+            if PROJECT_ROOT == PROJECT_ROOT.parent:
+                raise FileNotFoundError("Projektverzeichnis nicht gefunden.")
 
-        self.states = np.sum([n*States[s] for n, s in enumerate(States)], axis = 0).astype(int) # making a single states array in which each number corresponds to a behaviour
-        self.state_names = [*States.keys()]
-        self.neuron_traces = np.array(deltaFOverF_bc).T
-        #self.derivative_traces = derivatives['traces'].T
-        self.neuron_names = np.array(NeuronNames, dtype=object)
-        self.fps = fps
+            PROJECT_ROOT = PROJECT_ROOT.parent
 
-        ### To handle bug in dataset 3 where in neuron_names the last entry is a list. we replace the list with the contents of the list
-        self.neuron_names = np.array([x if not isinstance(x, list) else x[0] for x in self.neuron_names])
+        DATA_ROOT = PROJECT_ROOT / "data" / "raw" / "ds005363"
+
+        try:
+            self.raw = self.read_data(subject="101",
+            duration=60.0,
+            data_root=DATA_ROOT,
+            output_root=PROJECT_ROOT / "results")
+
+        except FileNotFoundError as exc:
+            raise SystemExit(f"Datei nicht verfügbar: {exc}") from exc
+        except RuntimeError as exc:
+            raise SystemExit(f"Analyse konnte nicht durchgeführt werden: {exc}") from exc
+
+        # EEG-Kanäle auswählen
+        eeg_picks = mne.pick_types(self.raw.info, eeg=True, exclude=[])
+
+        # Messwerte: (Kanäle, Zeitpunkte)
+        self.neuron_traces = self.raw.get_data(picks=eeg_picks)
+
+        # Kanalnamen in derselben Reihenfolge wie die Messwerte
+        self.channel_names = np.array(
+            [self.raw.ch_names[i] for i in eeg_picks],
+            dtype=object
+        )
+
+        # Abtastrate der Aufnahme: bei dir 1000 Hz
+        self.fps = self.raw.info["sfreq"]
+
+        self.state_names = [
+            "keine Kategorie",
+            "Gesicht",
+            "Tier",
+            "Ort",
+            "Objekt",
+            "Catch",
+        ]
+
+        # images of faces = S1-16 images of animals = S17-32 images of places = S33-48 images of objects = S49-64 catch trials = S65-69
+        # button_press = S99 run_onset = S100+run_number (8 runs in total) run_end = S199
+
+        self.stimulus_to_state = {}
+
+        for code in range(1, 17):
+            self.stimulus_to_state[code] = 1  # Gesicht
+
+        for code in range(17, 33):
+            self.stimulus_to_state[code] = 2  # Tier
+
+        for code in range(33, 49):
+            self.stimulus_to_state[code] = 3  # Ort
+
+        for code in range(49, 65):
+            self.stimulus_to_state[code] = 4  # Objekt
+
+        for code in range(65, 70):
+            self.stimulus_to_state[code] = 5
+
+        # ...._events.tsv datei nutzen für Stimuli und Events zu jedem Hz
+
+        self.BANDS = {
+            "delta": (1.0, 4.0),
+            "theta": (4.0, 8.0),
+            "alpha": (8.0, 13.0),
+            "beta": (13.0, 30.0),
+            "gamma": (30.0, 45.0),
+        }
+
+        labels = []
+        self.B = np.zeros(self.neuron_traces.shape[1], dtype=int)
+        for event in self.events:
+            code = self.extract_s(event["trial_type"])
+
+            if code in self.stimulus_to_state:
+                label = self.stimulus_to_state[code]
+            elif code == 199 or code in range(101, 109):
+                label = 0  
+            else:
+                continue 
+
+            sample = int(event["sample"])
+            labels.append((sample, label))
+
+        l = len(labels)
+
+        for e in range(l): 
+            current_sample, label = labels[e]
+            if e+1 < l:
+                next_sample = labels[e+1][0]
+            else:
+                next_sample = l
+            
+            self.B[current_sample:next_sample] = label
+
+    def read_tsv(self, path: Path) -> list[dict[str, str]]:
+        """Liest eine TSV-Datei robust gegen ein UTF-8-BOM ein."""
+
+        with path.open("r", encoding="utf-8-sig", newline="") as file:
+            return list(csv.DictReader(file, delimiter="\t"))
+
+    def first_matching(self, directory: Path, pattern: str) -> Path:
+        matches = sorted(directory.glob(pattern))
+        if not matches:
+            raise FileNotFoundError(f"Keine Datei mit Muster {pattern!r} in {directory}")
+        return matches[0]
+
+    def subject_directory(self, data_root: Path, subject: str) -> Path:
+        subject_label = subject if subject.startswith("sub-") else f"sub-{subject}"
+        directory = data_root / subject_label / "ses-01" / "eeg"
+        if not directory.is_dir():
+            raise FileNotFoundError(f"EEG-Verzeichnis nicht gefunden: {directory}")
+        return directory
+
+    def read_data(self, subject: str, duration: float, data_root: Path, output_root: Path): 
+        eeg_dir = self.subject_directory(data_root, subject)
+
+        vhdr_path = self.first_matching(eeg_dir, "*_eeg.vhdr")
+        json_path = self.first_matching(eeg_dir, "*_eeg.json")
+        channels_path = self.first_matching(eeg_dir, "*_channels.tsv")
+        events_path = self.first_matching(eeg_dir, "*_events.tsv")
+
+        with json_path.open("r", encoding="utf-8") as file:
+            metadata = json.load(file)
+        self.channels = self.read_tsv(channels_path)
+        self.events = self.read_tsv(events_path)
+
+        print(f"Lese BrainVision-Aufnahme ein: {vhdr_path}")
+        raw = mne.io.read_raw_brainvision(vhdr_path, preload=False, verbose="ERROR")
+        eeg_picks = mne.pick_types(raw.info, eeg=True, exclude=[])
+        if len(eeg_picks) == 0:
+            raise RuntimeError("Die Aufnahme enthält keine als EEG markierten Kanäle.")
+
+        return raw
 
 
-    def exclude_neurons(self, exclude_neurons):
-        """
-        Excludes specified neurons from the database.
 
-        Args:
-            exclude_neurons (list): List of neuron names to exclude.
+    def extract_s(self, trial_type):
+        if not trial_type.startswith("Stimulus/S"):
+            return None
 
-        Returns:
-            None
-
-        """
-        neuron_names = self.neuron_names
-        mask = np.zeros_like(self.neuron_names, dtype='bool')
-        for exclude_neuron in exclude_neurons:
-            mask = np.logical_or(mask, neuron_names==exclude_neuron)
-        mask = ~mask
-        self.neuron_traces = self.neuron_traces[mask] 
-        #self.derivative_traces = self.derivative_traces[mask] 
-        self.neuron_names = self.neuron_names[mask]
-
-    def _only_identified_neurons(self):
-        mask = np.logical_not([x.isnumeric() for x in self.neuron_names])
-        self.neuron_traces = self.neuron_traces[mask] 
-        #self.derivative_traces = self.derivative_traces[mask] 
-        self.neuron_names = self.neuron_names[mask]
-
-    def categorise_neurons(self):
-        self._only_identified_neurons()
-        neuron_list = mat73.loadmat('data/raw/Order279.mat')['Order279']
-        neuron_category = mat73.loadmat('data/raw/ClassIDs_279.mat')['ClassIDs_279']
-        category_dict = {neuron: int(category) for neuron, category in zip(neuron_list, neuron_category)}
-
-        mask = np.array([category_dict[neuron] for neuron in self.neuron_names])
-        mask_s = mask == 1
-        mask_i = mask == 2
-        mask_m = mask == 3
-
-        self.neuron_names_s = self.neuron_names[mask_s]
-        self.neuron_names_i = self.neuron_names[mask_i]
-        self.neuron_names_m = self.neuron_names[mask_m]
-
-        self.neuron_traces_s = self.neuron_traces[mask_s]
-        self.neuron_traces_i = self.neuron_traces[mask_i]
-        self.neuron_traces_m = self.neuron_traces[mask_m]
-
-        return mask
-
-flat_partial = lambda x: x.reshape(x.shape[0],-1)
-
-############################################
-####### Data preprocessing functions #######
-############################################
-
-def bandpass(traces, f_l, f_h, sampling_freq):
-    """
-    Apply a bandpass filter to the input traces.
-
-    Parameters:
-        traces (np.ndarray): Input traces to be filtered.
-        f_l (float): Lower cutoff frequency in Hz.
-        f_h (float): Upper cutoff frequency in Hz.
-        sampling_freq (float): Sampling frequency in Hz.
-
-    Returns:
-        filtered (np.ndarray): Filtered traces.
-
-    """    
-    cut_off_h = f_h*sampling_freq/2 ## in units of sampling_freq/2
-    cut_off_l= f_l*sampling_freq/2 ## in units of sampling_freq/2
-    #### Note: the input f_l and f_h are angular frequencies. Hence the argument sampling_freq in the function is redundant: since the signal.butter function takes angular frequencies if fs is None.
-    
-    sos = signal.butter(4, [cut_off_l, cut_off_h], 'bandpass', fs=sampling_freq, output='sos')
-    ### filtering the traces forward and backwards
-    filtered = signal.sosfilt(sos, traces)
-    filtered = np.flip(filtered, axis=1)
-    filtered = signal.sosfilt(sos, filtered)
-    filtered = np.flip(filtered, axis=1)
-    return filtered
-
-def preprocess_data(X, fps):
-    """Preprocess the input data by applying bandpass filtering.
-    
-    Args:
-        X: Input data.
-        fps (float): Frames per second.
-    
-    Returns:
-        numpy.ndarray: Preprocessed data after bandpass filtering.
-    """
-    time = 1 / fps * np.arange(0, X.shape[0])
-    filtered = bandpass(X.T, f_l=1e-10, f_h=0.05, sampling_freq=fps).T
-
-    return time, filtered
+        number = trial_type.removeprefix("Stimulus/S").strip()
+        return int(number)
 
 
 ########################################################
@@ -179,7 +221,7 @@ def prep_data(X, B, win=15):
 
     Parameters:
         X : np.ndarray
-            Raw neuronal traces of shape (n, t), where n is the number of neurons and t is the number of time steps.
+            Raw neuronal traces of shape (t, n), where n is the number of neurons and t is the number of time steps.
         B : np.ndarray
             Raw behavioral traces of shape (t,), representing the behavioral data corresponding to the neuronal
             traces.
@@ -584,3 +626,102 @@ def plot_latent_timeseries(Y, B, state_names):
     plt.xlabel("time $t$")
     plt.axis([0,Y.shape[0],-0.5,0.5])
     plt.show()
+
+
+
+
+
+# def exclude_neurons(self, exclude_neurons):
+    #     """
+    #     Excludes specified neurons from the database.
+
+    #     Args:
+    #         exclude_neurons (list): List of neuron names to exclude.
+
+    #     Returns:
+    #         None
+
+    #     """
+    #     neuron_names = self.neuron_names
+    #     mask = np.zeros_like(self.neuron_names, dtype='bool')
+    #     for exclude_neuron in exclude_neurons:
+    #         mask = np.logical_or(mask, neuron_names==exclude_neuron)
+    #     mask = ~mask
+    #     self.neuron_traces = self.neuron_traces[mask] 
+    #     #self.derivative_traces = self.derivative_traces[mask] 
+    #     self.neuron_names = self.neuron_names[mask]
+
+    # def _only_identified_neurons(self):
+    #     mask = np.logical_not([x.isnumeric() for x in self.neuron_names])
+    #     self.neuron_traces = self.neuron_traces[mask] 
+    #     #self.derivative_traces = self.derivative_traces[mask] 
+    #     self.neuron_names = self.neuron_names[mask]
+
+    # def categorise_neurons(self):
+    #     self._only_identified_neurons()
+    #     neuron_list = mat73.loadmat('data/raw/Order279.mat')['Order279']
+    #     neuron_category = mat73.loadmat('data/raw/ClassIDs_279.mat')['ClassIDs_279']
+    #     category_dict = {neuron: int(category) for neuron, category in zip(neuron_list, neuron_category)}
+
+    #     mask = np.array([category_dict[neuron] for neuron in self.neuron_names])
+    #     mask_s = mask == 1
+    #     mask_i = mask == 2
+    #     mask_m = mask == 3
+
+    #     self.neuron_names_s = self.neuron_names[mask_s]
+    #     self.neuron_names_i = self.neuron_names[mask_i]
+    #     self.neuron_names_m = self.neuron_names[mask_m]
+
+    #     self.neuron_traces_s = self.neuron_traces[mask_s]
+    #     self.neuron_traces_i = self.neuron_traces[mask_i]
+    #     self.neuron_traces_m = self.neuron_traces[mask_m]
+
+    #     return mask
+
+# flat_partial = lambda x: x.reshape(x.shape[0],-1)
+
+############################################
+####### Data preprocessing functions #######
+############################################
+
+# def bandpass(traces, f_l, f_h, sampling_freq):
+#     """
+#     Apply a bandpass filter to the input traces.
+
+#     Parameters:
+#         traces (np.ndarray): Input traces to be filtered.
+#         f_l (float): Lower cutoff frequency in Hz.
+#         f_h (float): Upper cutoff frequency in Hz.
+#         sampling_freq (float): Sampling frequency in Hz.
+
+#     Returns:
+#         filtered (np.ndarray): Filtered traces.
+
+#     """    
+#     cut_off_h = f_h*sampling_freq/2 ## in units of sampling_freq/2
+#     cut_off_l= f_l*sampling_freq/2 ## in units of sampling_freq/2
+#     #### Note: the input f_l and f_h are angular frequencies. Hence the argument sampling_freq in the function is redundant: since the signal.butter function takes angular frequencies if fs is None.
+    
+#     sos = signal.butter(4, [cut_off_l, cut_off_h], 'bandpass', fs=sampling_freq, output='sos')
+#     ### filtering the traces forward and backwards
+#     filtered = signal.sosfilt(sos, traces)
+#     filtered = np.flip(filtered, axis=1)
+#     filtered = signal.sosfilt(sos, filtered)
+#     filtered = np.flip(filtered, axis=1)
+#     return filtered
+
+    # def preprocess_data(X, fps):
+    #     """Preprocess the input data by applying bandpass filtering.
+        
+    #     Args:
+    #         X: Input data.
+    #         fps (float): Frames per second.
+        
+    #     Returns:
+    #         numpy.ndarray: Preprocessed data after bandpass filtering.
+    #     """
+    #     time = 1 / fps * np.arange(0, X.shape[0])
+    #     filtered = (X.T, f_l=1e-10, f_h=0.05, sampling_freq=fps).T
+
+    #     return time, filtered
+
