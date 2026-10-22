@@ -86,6 +86,7 @@ Eine sinnvolle Gruppierung für state\_names wäre beispielsweise:
     \item Button-Press
 \end{itemize}
 
-
-
+\section{Problems}
+The architecture of BunDLe-Net is way to badly optimized for this kind of data load. For just one subject the Computer would need storage of 60 GiB to store one array. 
+In order to fix this, I will reduce from float64 to float32. Also I will need to introduce a window mechanism, in order to sequentially send one part of the array to model.tau. 
 \end{document}

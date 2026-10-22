@@ -1,39 +1,26 @@
 import sys
 sys.path.append(r'../')
-import mat73
 import numpy as np
 import seaborn as sns
 from tqdm import tqdm
-from scipy import signal
 from pathlib import Path
 import csv
 import json
 import mne
-import argparse
-from typing import Any, Iterable
 from matplotlib import cm
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
-import matplotlib.colors as mcolors
 from matplotlib.lines import Line2D
 import matplotlib.animation as animation
 from matplotlib.colors import ListedColormap
 
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.losses import Loss
 from tensorflow.keras.models import Model
-from tensorflow.keras import layers, losses
+from tensorflow.keras import layers
 
-from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
-from sklearn.metrics import accuracy_score
 from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import KFold, train_test_split
-from sklearn.metrics import accuracy_score, mean_squared_error
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.model_selection import KFold
 
 #########################################
 ############## Loading Data #############
@@ -288,7 +275,7 @@ def timeseries_train_test_split(X_paired, B_1):
             return X_train, X_test, B_train_1, B_test_1
 
 
-def tf_batch_prep(X_, B_, batch_size = 100):
+def tf_batch_prep(X_, B_, batch_size = 1024):
     """
     Prepare datasets for TensorFlow by creating batches.
 
@@ -338,12 +325,10 @@ class BunDLeNet(Model):
             layers.Dense(25, activation='relu'),
             layers.Dense(10, activation='relu'),
             layers.Dense(latent_dim, activation='linear'),
-            layers.Normalization(axis=-1), 
             layers.GaussianNoise(0.05)
         ])
         self.T_Y = tf.keras.Sequential([
             layers.Dense(latent_dim, activation='linear'),
-            layers.Normalization(axis=-1),    
         ])
         self.predictor = tf.keras.Sequential([
             layers.Dense(8, activation='linear')
@@ -584,11 +569,24 @@ def plot_ps_(fig, ax, Y, B, state_names, show_points=False, legend=True, colors=
     if colors is None:
         colors = sns.color_palette('deep', len(state_names))
 
-    for i in range(len(Y) - 1):
-        d = (Y[i+1] - Y[i])
-        ax.quiver(Y[i, 0], Y[i, 1], Y[i, 2],
-                  d[0], d[1], d[2],
-                  color=colors[B[i]], arrow_length_ratio=0.1/np.linalg.norm(d), linewidths=1, **kwargs)
+        max_arrows = 1000
+        step = max(1, (len(Y) - 1) // max_arrows)
+
+        for i in range(0, len(Y) - 1, step):
+            d = Y[i + 1] - Y[i]
+            norm = np.linalg.norm(d)
+
+            if norm == 0:
+                continue
+
+            ax.quiver(
+                Y[i, 0], Y[i, 1], Y[i, 2],
+                d[0], d[1], d[2],
+                color=colors[B[i]],
+                arrow_length_ratio=0.1 / norm,
+                linewidths=1,
+                **kwargs
+            )
     ax.set_axis_off()  
 
     if legend == True:
