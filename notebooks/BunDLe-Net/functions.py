@@ -49,13 +49,13 @@ class Database:
         PROJECT_ROOT = Path.cwd().resolve()
 
         # Nach oben gehen, bis das Datenverzeichnis gefunden wird
-        while not (PROJECT_ROOT / "data" / "raw" / "ds005363").is_dir():
+        while not (PROJECT_ROOT / "data" / "raw" / "ds005363-download").is_dir():
             if PROJECT_ROOT == PROJECT_ROOT.parent:
                 raise FileNotFoundError("Projektverzeichnis nicht gefunden.")
 
             PROJECT_ROOT = PROJECT_ROOT.parent
 
-        DATA_ROOT = PROJECT_ROOT / "data" / "raw" / "ds005363"
+        DATA_ROOT = PROJECT_ROOT / "data" / "raw" / "ds005363-download"
 
         try:
             self.raw = self.read_data(subject="101",
@@ -226,16 +226,19 @@ def prep_data(X, B, win=15):
             the behavioral data corresponding to the next time step in the paired neuronal traces.
 
     """
-    win+=1
-    X_win = np.zeros((X.shape[0]-win+1, win, X.shape[1]))
-    for i, _ in enumerate(X_win):
-        X_win[i] = X[i:i+win]
+    if win < 1 or len(X) <= win:
+        raise ValueError("X must contain more samples than the positive window length.")
+    if len(X) != len(B):
+        raise ValueError("X and B must have the same number of samples.")
+    # Read-only views share the original recording, including overlapping pairs.
+    windows = np.lib.stride_tricks.sliding_window_view(
+        X, window_shape=win + 1, axis=0
+    ).transpose(0, 2, 1)
+    X_paired = np.lib.stride_tricks.sliding_window_view(
+        windows, window_shape=win, axis=1
+    ).transpose(0, 1, 3, 2)
+    B_1 = B[win:]
 
-    Xwin0, Xwin1 = X_win[:,:-1,:], X_win[:,1:,:]
-    B_1 = B[win-1:]
-    X_paired = np.array([Xwin0, Xwin1])
-    X_paired = np.transpose(X_paired, axes=(1,0,2,3))
-    
     return X_paired, B_1
 
 def timeseries_train_test_split(X_paired, B_1):
@@ -296,8 +299,23 @@ def tf_batch_prep(X_, B_, batch_size = 1024):
 
     The function returns the prepared batch dataset, which will be used for training the TensorFlow model.
     """
-    batch_dataset = tf.data.Dataset.from_tensor_slices((X_, B_))
-    batch_dataset = batch_dataset.batch(batch_size)
+    if len(X_) != len(B_):
+        raise ValueError("Input windows and labels must have the same length.")
+
+    def batches():
+        for start in range(0, len(X_), batch_size):
+            stop = start + batch_size
+            yield (np.asarray(X_[start:stop], dtype=np.float32),
+                   np.asarray(B_[start:stop], dtype=np.int64))
+
+    # Convert only one batch at a time; from_tensor_slices expands all views.
+    batch_dataset = tf.data.Dataset.from_generator(
+        batches,
+        output_signature=(
+            tf.TensorSpec((None,) + X_.shape[1:], tf.float32),
+            tf.TensorSpec((None,) + B_.shape[1:], tf.int64),
+        ),
+    ).prefetch(1)
     return batch_dataset
 
 
