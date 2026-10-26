@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import datetime
 from numpy.lib.stride_tricks import sliding_window_view
 from sklearn.decomposition import PCA
 from functions import Database, prep_data, BunDLeNet, train_model, plotting_neuronal_behavioural, plot_latent_timeseries, plot_phase_space
@@ -37,6 +38,10 @@ X_paired, B_1 = prep_data(X, B, win=15)
 
 ### Deploy BunDLe Net
 model = BunDLeNet(latent_dim=3)
+
+logs = "logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+tb_callback = tf.keras.callbacks.TensorBoard(log_dir=logs, profile_batch="20, 40")
+
 # Erzeugt zunächst nur eine speichersparende Sicht auf die Daten.
 
 _ = model(tf.convert_to_tensor(X_paired[:1], dtype=tf.float32))
