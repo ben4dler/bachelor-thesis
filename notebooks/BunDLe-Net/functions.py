@@ -448,7 +448,7 @@ def train_model(
         gamma (float): Weight for the DCC loss component.
         n_epochs (int): Number of training epochs.
         pca_initialisation (bool)
-        best_of_5_init (bool)
+        best_of_5_init (bool)   
 
     Returns:
         numpy.ndarray: Array of loss values during training.
@@ -477,10 +477,11 @@ def train_model(
         for epoch in epochs:
             for step, (x_train, b_train_1) in enumerate(train_dataset):
                 # Nach 10 Aufwärmschritten starten.
-                if global_step == 10:
-                    tf.profiler.experimental.start("logs/profile", options=options)
-                    profiling = True
-
+                if len(tf.config.list_physical_devices("GPU")) >= 1:
+                    if global_step == 10:
+                        tf.profiler.experimental.start("logs/profile", options=options)
+                        profiling = True
+        
                 DCC_loss, behaviour_loss, total_loss = trainer.train_step(
                     x_train, b_train_1, gamma=gamma
                 )
