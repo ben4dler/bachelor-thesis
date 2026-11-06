@@ -365,7 +365,7 @@ class BunDLeNet(Model):
                 layers.Dense(latent_dim, activation="linear"),
             ]
         )
-        self.predictor = tf.keras.Sequential([layers.Dense(8, activation="linear")])
+        self.predictor = tf.keras.Sequential([layers.Dense(5, activation="linear")])
 
     def call(self, X):
         # Upper arm of commutativity diagram
@@ -448,7 +448,7 @@ def train_model(
         gamma (float): Weight for the DCC loss component.
         n_epochs (int): Number of training epochs.
         pca_initialisation (bool)
-        best_of_5_init (bool)   
+        best_of_5_init (bool)
 
     Returns:
         numpy.ndarray: Array of loss values during training.
@@ -481,7 +481,7 @@ def train_model(
                     if global_step == 10:
                         tf.profiler.experimental.start("logs/profile", options=options)
                         profiling = True
-        
+
                 DCC_loss, behaviour_loss, total_loss = trainer.train_step(
                     x_train, b_train_1, gamma=gamma
                 )
