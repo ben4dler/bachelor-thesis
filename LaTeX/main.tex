@@ -89,4 +89,12 @@ Eine sinnvolle Gruppierung für state\_names wäre beispielsweise:
 \section{Problems}
 The architecture of BunDLe-Net is way to badly optimized for this kind of data load. For just one subject the Computer would need storage of 60 GiB to store one array. 
 In order to fix this, I will reduce from float64 to float32. Also I will need to introduce a window mechanism, in order to sequentially send one part of the array to model.tau. 
+
+Notes on the subjects of the study: 
+\begin{itemize}
+    \item sub-101 has a break in recording after some time. Need to zip the two parts together without the break in the middle.
+    \item sub-102 has a normal recording. 
+    \item sub-103 has a kind of small break from approx. 2500 to 2600 seconds. 
+    
+\end{itemize}
 \end{document}
