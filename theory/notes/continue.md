@@ -179,3 +179,12 @@ Der Sliding Estimator trainiert **für jeden Zeitpunkt t ein eigenes, unabhängi
 - Hilfe gibt es in Stufen: sag **„Hinweis“**, **„mehr Hilfe“** oder **„Lösung“**.
 - Zeig mir deinen Code, dann bekommst du Feedback.
 - Drei Gewohnheiten: **erst auf Deutsch planen**, **`print(x.shape)` nach jedem Schritt**, **Fehlermeldungen von unten lesen**.
+
+
+
+
+Eine Lösung ist, die Pause als „schlecht“ zu markieren. ica.fit überspringt Abschnitte, deren Annotation mit BAD_ beginnt, automatisch:
+
+
+raw.annotations.append(onset=1760, duration=740, description="BAD_pause")
+Die Zeiten musst du pro Proband anpassen, oder du suchst die Lücke automatisch: Wo liegen zwei aufeinanderfolgende Events weiter als z. B. 30 s auseinander? Für den Anfang kannst du die Lücke aber auch drin lassen. Das ist eine Verbesserung, kein Fehler.
