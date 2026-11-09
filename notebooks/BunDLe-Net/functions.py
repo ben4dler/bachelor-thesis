@@ -1,5 +1,5 @@
 import sys
-from notebooks.data_reader import DataReader
+from data_reader import DataReader
 
 sys.path.append(r"../")
 import numpy as np
