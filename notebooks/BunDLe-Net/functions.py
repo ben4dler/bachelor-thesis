@@ -1,4 +1,5 @@
 import sys
+from notebooks.data_reader import DataReader
 
 sys.path.append(r"../")
 import numpy as np
@@ -48,31 +49,12 @@ class Database:
     """
 
     def __init__(self):
-        PROJECT_ROOT = Path.cwd().resolve()
+        data_reader = DataReader()
 
-        # Nach oben gehen, bis das Datenverzeichnis gefunden wird
-        while not (PROJECT_ROOT / "data" / "raw" / "ds005363-download").is_dir():
-            if PROJECT_ROOT == PROJECT_ROOT.parent:
-                raise FileNotFoundError("Projektverzeichnis nicht gefunden.")
-
-            PROJECT_ROOT = PROJECT_ROOT.parent
-
-        DATA_ROOT = PROJECT_ROOT / "data" / "raw" / "ds005363-download"
-
-        try:
-            self.raw = self.read_data(
-                subject="101",
-                duration=60.0,
-                data_root=DATA_ROOT,
-                output_root=PROJECT_ROOT / "results",
-            )
-
-        except FileNotFoundError as exc:
-            raise SystemExit(f"Datei nicht verfügbar: {exc}") from exc
-        except RuntimeError as exc:
-            raise SystemExit(
-                f"Analyse konnte nicht durchgeführt werden: {exc}"
-            ) from exc
+        self.raw, self.channels, self.events = data_reader.read_data(
+            subject="101",
+            duration=60.0,
+        )
 
         # EEG-Kanäle auswählen
         eeg_picks = mne.pick_types(self.raw.info, eeg=True, exclude=[])
@@ -117,16 +99,6 @@ class Database:
         for code in range(65, 70):
             self.stimulus_to_state[code] = 5
 
-        # ...._events.tsv datei nutzen für Stimuli und Events zu jedem Hz
-
-        self.BANDS = {
-            "delta": (1.0, 4.0),
-            "theta": (4.0, 8.0),
-            "alpha": (8.0, 13.0),
-            "beta": (13.0, 30.0),
-            "gamma": (30.0, 45.0),
-        }
-
         labels = []
         self.B = np.zeros(self.neuron_traces.shape[1], dtype=int)
         for event in self.events:
@@ -152,50 +124,6 @@ class Database:
                 next_sample = l
 
             self.B[current_sample:next_sample] = label
-
-    def read_tsv(self, path: Path) -> list[dict[str, str]]:
-        """Liest eine TSV-Datei robust gegen ein UTF-8-BOM ein."""
-
-        with path.open("r", encoding="utf-8-sig", newline="") as file:
-            return list(csv.DictReader(file, delimiter="\t"))
-
-    def first_matching(self, directory: Path, pattern: str) -> Path:
-        matches = sorted(directory.glob(pattern))
-        if not matches:
-            raise FileNotFoundError(
-                f"Keine Datei mit Muster {pattern!r} in {directory}"
-            )
-        return matches[0]
-
-    def subject_directory(self, data_root: Path, subject: str) -> Path:
-        subject_label = subject if subject.startswith("sub-") else f"sub-{subject}"
-        directory = data_root / subject_label / "ses-01" / "eeg"
-        if not directory.is_dir():
-            raise FileNotFoundError(f"EEG-Verzeichnis nicht gefunden: {directory}")
-        return directory
-
-    def read_data(
-        self, subject: str, duration: float, data_root: Path, output_root: Path
-    ):
-        eeg_dir = self.subject_directory(data_root, subject)
-
-        vhdr_path = self.first_matching(eeg_dir, "*_eeg.vhdr")
-        json_path = self.first_matching(eeg_dir, "*_eeg.json")
-        channels_path = self.first_matching(eeg_dir, "*_channels.tsv")
-        events_path = self.first_matching(eeg_dir, "*_events.tsv")
-
-        with json_path.open("r", encoding="utf-8") as file:
-            metadata = json.load(file)
-        self.channels = self.read_tsv(channels_path)
-        self.events = self.read_tsv(events_path)
-
-        print(f"Lese BrainVision-Aufnahme ein: {vhdr_path}")
-        raw = mne.io.read_raw_brainvision(vhdr_path, preload=False, verbose="ERROR")
-        eeg_picks = mne.pick_types(raw.info, eeg=True, exclude=[])
-        if len(eeg_picks) == 0:
-            raise RuntimeError("Die Aufnahme enthält keine als EEG markierten Kanäle.")
-
-        return raw
 
     def extract_s(self, trial_type):
         if not trial_type.startswith("Stimulus/S"):
