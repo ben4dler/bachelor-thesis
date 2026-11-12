@@ -96,11 +96,7 @@ class Preprocessor:
         return X_train, X_test
 
     def create_labels_for_epochs(self, epochs):
-        """
-        Gibt eine Matrix mit der Form (Anzahl Epochs, Anzahl Zeitpunkte) zurück.
-        Vor dem Bildbeginn steht 0, ab dem Bildbeginn die Kategorie:
-        1 = Gesicht, 2 = Tier, 3 = Ort, 4 = Objekt.
-        """
+
         image_numbers = epochs.events[:, 2]
 
         category_per_epoch = (
@@ -126,12 +122,6 @@ class Preprocessor:
     def list_all_window_pairs(
         self, number_of_epochs, number_of_time_points, window_length
     ):
-        """
-        Jedes Fensterpaar ist eindeutig durch zwei Zahlen beschrieben:
-        aus welcher Epoch es stammt und an welchem Zeitpunkt das erste Fenster beginnt.
-        Das zweite Fenster ist um einen Zeitpunkt verschoben, deshalb braucht ein Paar
-        window_length + 1 Zeitpunkte. Paare über Epoch-Grenzen hinweg gibt es nicht.
-        """
 
         number_of_start_points_per_epoch = number_of_time_points - window_length
 
@@ -147,14 +137,7 @@ class Preprocessor:
     def build_training_batch(
         self, eeg_data, labels, epoch_numbers, start_time_points, window_length
     ):
-        """
-        eeg_data:  Form (Anzahl Epochs, Anzahl Kanäle, Anzahl Zeitpunkte)
-        labels:    Form (Anzahl Epochs, Anzahl Zeitpunkte)
 
-        Rückgabe wie bei prep_data:
-        window_pairs:  Form (Anzahl Paare, 2, window_length, Anzahl Kanäle)
-        target_labels: Form (Anzahl Paare,)
-        """
         window_pairs = []
         target_labels = []
 
