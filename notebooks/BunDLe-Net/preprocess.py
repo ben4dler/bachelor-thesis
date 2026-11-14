@@ -13,8 +13,8 @@ class Preprocessor:
         self.NUMBER_OF_IMAGES_PER_CATEGORY = 16
         self.LABEL_BEFORE_IMAGE_ONSET = 0
         self.BATCH_SIZE = 1024
-        self.GAMMA = 0.9
-        self.WINDOW_LENGTH = 25
+        self.GAMMA = 0.0
+        self.WINDOW_LENGTH = 100
         self.number_of_categories = number_of_categories
 
     # TODO: Implement PCA and compare before and after; check creations of epochs with official mne doc. https://mne.tools/stable/auto_examples/decoding/decoding_unsupervised_spatial_filter.html
@@ -28,11 +28,12 @@ class Preprocessor:
             self.ica()
         self.create_epochs()
         if use_autoreject:
-            self.autoreject()
+           self.autoreject()
 
     def filter(self):
         self.raw.load_data()
-        self.raw.filter(l_freq=0.5, h_freq=None)
+        self.raw.filter(l_freq=1, h_freq=None)
+        self.raw.notch_filter(np.arange(50,251,50))
         print(f"Successfully filtered the data.")
         return self.raw
 
@@ -53,10 +54,9 @@ class Preprocessor:
         self.event_ids = create_event_ids(self.event_dict, self.categories)
 
         self.epochs = create_epochs(self.raw, self.events_arr, self.event_ids)
+        self.epochs.resample(100)
 
     def autoreject(self):
-
-        self.epochs.resample(250)
 
         """ar = autoreject.AutoReject(n_interpolate=[1, 4], random_state=11,
                                 n_jobs=-1, verbose=True)     
@@ -95,7 +95,7 @@ class Preprocessor:
         scaler = mne.decoding.Scaler(scalings="mean")
         X_train = scaler.fit_transform(X_train)
         X_test = scaler.transform(X_test)
-        return X_train, X_test
+        return X_train.astype(np.float32), X_test.astype(np.float32)
 
     def create_labels_for_epochs(self, epochs):
 
@@ -119,7 +119,7 @@ class Preprocessor:
                 epoch_number
             ]
 
-        return labels, category_per_epoch
+        return labels.astype(np.float32), category_per_epoch
 
     def list_all_window_pairs(
         self, number_of_epochs, number_of_time_points, window_length

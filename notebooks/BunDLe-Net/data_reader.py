@@ -1,13 +1,8 @@
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
 from pathlib import Path
 import mne
 import csv
 import json
 import sys
-
 print(__doc__)
 
 
@@ -22,7 +17,7 @@ class DataReader:
             self.PROJECT_ROOT = self.PROJECT_ROOT.parent
 
         self.DATA_ROOT = self.PROJECT_ROOT / "data" / "raw" / "ds005363-download"
-
+        self.DATA = self.PROJECT_ROOT / "data"
         self.BUNDLE_DIR = self.PROJECT_ROOT / "notebooks" / "BunDLe-Net"
         if str(self.BUNDLE_DIR) not in sys.path:
             sys.path.insert(0, str(self.BUNDLE_DIR))
@@ -51,9 +46,7 @@ class DataReader:
             raise FileNotFoundError(f"EEG-Verzeichnis nicht gefunden: {directory}")
         return directory
 
-    # subjects_dir = subject_directory(DATA_ROOT, "102")
-
-    def read_data(self, subject: str, duration: float):
+    def read_data(self, subject: str):
         eeg_dir = self.subject_directory(self.DATA_ROOT, subject)
 
         vhdr_path = self.first_matching(eeg_dir, "*_eeg.vhdr")
@@ -75,3 +68,5 @@ class DataReader:
         raw.set_montage("standard_1020")
 
         return raw, channels, events
+
+
