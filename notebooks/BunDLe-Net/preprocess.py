@@ -18,7 +18,9 @@ class Preprocessor:
         self.number_of_categories = number_of_categories
 
     # TODO: Implement PCA and compare before and after; check creations of epochs with official mne doc. https://mne.tools/stable/auto_examples/decoding/decoding_unsupervised_spatial_filter.html
-
+    # CAR - Spatial filtering 
+    # Normalize
+    
     def run_pipeline(self, use_filter=True, use_ica=True, use_autoreject=True):
         if use_filter:
             self.filter()

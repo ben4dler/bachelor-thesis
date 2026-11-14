@@ -45,3 +45,62 @@ Ich habe mir deine Notizen, den LaTeX-Entwurf, `preprocess.py` und den Datensatz
 **Prüf vorher noch selbst eine Sache:** Schau dir in `preprocess.py` die Funktion `ica()` an. Welche Komponenten entfernt `ica.apply(self.raw)` eigentlich, wenn du vorher nichts festgelegt hast? Wenn die Antwort lautet, dass das Signal unverändert bleibt, solltest du das wissen, bevor du ihm sagst, dass du ICA verwendest.
 
 Wenn du die wichtigsten 5 oder 6 Fragen auf einem Blatt zum Mitnehmen haben willst, kann ich sie dir kürzen.
+
+
+
+Ja, die Idee ergibt Sinn. Bei einem Punkt solltest du aber genau sein, was du eigentlich vergleichst.
+
+## Was dein Betreuer vermutlich meint
+
+```
+X(t) ──τ──> Y(t) ──SWE──> Decoding-Accuracy über die Zeit
+```
+
+Statt den SWE auf das rohe EEG X(t) anzuwenden (der klassische MNE-Weg), wendest du ihn auf die latente Trajektorie Y(t) an. Dann fragst du: Wie gut lässt sich die Kategorie bzw. das Verhalten zu jedem Zeitpunkt aus dem gelernten Raum ablesen? Den Vergleich mit SWE auf X(t) bekommst du praktisch umsonst dazu. Damit hast du in beiden Fällen dieselbe Ausgangsbasis, also denselben Decoder auf zwei verschiedenen Repräsentationen.
+
+## Wo ich bei „Y(t+1) mit dem SWE vergleichen“ nachhaken würde
+
+Y(t+1) aus dem Forward-Model T_Y und der SWE liefern zwei verschiedene Arten von Größen:
+- T_Y(Y(t)) ist eine **Zustandsvorhersage**, also ein Punkt im latenten Raum.
+- Der SWE liefert pro Zeitpunkt eine **Klassifikationsgüte**, also einen Score.
+
+Direkt vergleichen kannst du die beiden also nicht. Überleg dir, wie du sie in denselben Raum bringst. Ein Denkanstoß: Was passiert, wenn du den SWE-Klassifikator, der auf dem *echten* Y(t+1) trainiert wurde, auf das *vorhergesagte* Ŷ(t+1) = T_Y(Y(t)) anwendest? Was würde es bedeuten, wenn die Accuracy ähnlich bleibt, und was, wenn sie einbricht?
+
+## Fallstricke, die du dir anschauen solltest
+
+1. **Leakage:** BunDLe-Net nutzt beim Training die Labels B. Der latente Raum ist also darauf optimiert, B gut vorherzusagen. Wenn τ auf allen Daten trainiert wurde und du danach den SWE mit Cross-Validation auf Y laufen lässt, ist das Ergebnis zu optimistisch. Frag dich: Auf welchen Trials wurde τ trainiert, und auf welchen testet der SWE? Das Stichwort dazu ist *nested cross-validation*.
+2. **Zeitliche Auflösung:** Bekommt τ einen einzelnen Zeitpunkt oder ein Fenster? Schau dir dazu in deinem `epoch_model.ipynb` an, wie `list_all_window_pairs` die Eingaben baut. Wenn Y(t) schon ein Fenster zusammenfasst, steckt in einem „Zeitpunkt“ von Y mehr Information als in einem von X. Der Vergleich mit SWE auf X ist dann nicht ganz fair.
+3. **Dimensionalität:** Y hat vermutlich nur 3–10 Dimensionen, X dagegen 64+ Kanäle. Das ist eigentlich der interessante Punkt: Bleibt die Decodierbarkeit trotz der starken Kompression erhalten?
+
+## Zum Weiterlesen
+- MNE-Doku zu `mne.decoding.SlidingEstimator` und `GeneralizingEstimator`. Letzterer (Temporal Generalization, King & Dehaene 2014) könnte für deine Y(t) → Y(t+1)-Frage sogar besser passen.
+- Varoquaux et al. (2017), *Assessing and tuning brain decoders*, zum Thema CV und Leakage.
+
+Mein Vorschlag: Kläre mit deinem Betreuer kurz, ob das Ziel (a) „Ist Y genauso gut decodierbar wie X?“ oder (b) „Bewahrt das Forward-Model die decodierbare Information?“ ist. Für (a) reicht SWE auf X gegen SWE auf Y. Für (b) brauchst du den Ansatz mit Ŷ(t+1) von oben.
+---
+
+## SWE im Kommutativitätsdiagramm
+
+```
+              T_X (unbekannt)
+     X(t) ─────────────────────▶ X(t+1)
+      │  ①                         │  ①
+      │ τ                          │ τ
+      ▼                            ▼
+     Y(t) ─────────T_Y──────────▶ Y(t+1)  =  τ(X(t+1))     ← "echter" Pfad
+      │  ②                         ┊
+      │                            ┊  ③  Ŷ(t+1) = T_Y(τ(X(t)))  ← "vorhergesagter" Pfad
+      ▼                            ▼
+     B(t)                        B(t+1)
+```
+
+- **① SWE auf X(t):** Baseline. Klassisches Decoding auf dem rohen EEG, dein Referenzwert.
+- **② SWE auf Y(t) = τ(X(t)):** Vorschlag des Betreuers. Erhält τ die decodierbare Information? SWE-Kurve aus ① gegen die aus ② vergleichen. Im Idealfall ist ② ≈ ①, obwohl Y viel weniger Dimensionen hat.
+- **③ SWE auf Ŷ(t+1):** Prüft die Kommutativität τ(X(t+1)) ≈ T_Y(τ(X(t))). Klassifikator auf dem *echten* Y(t+1) trainieren, auf dem *vorhergesagten* Ŷ(t+1) testen.
+
+**Reihenfolge:** Erst ② gegen ①, danach ③. ③ ergibt nur Sinn, wenn ② schon funktioniert.
+
+### Offene Fragen
+- [ ] Wo wirkt die Verhaltensvorhersage Y → B beim Training? Was bedeutet das für Leakage bei ② (nested CV)?
+- [ ] Wie groß ist der Schritt t → t+1? Kontrollbedingung: SWE von Y(t) direkt auf Y(t+1) anwenden, ohne T_Y. Schlägt T_Y diese triviale Vorhersage?
+- [ ] `SlidingEstimator` (gleicher Zeitpunkt) oder `GeneralizingEstimator` (Trainieren bei t, Testen bei t')? Für ③ eher den zweiten.
