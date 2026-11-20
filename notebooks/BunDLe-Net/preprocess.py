@@ -8,8 +8,7 @@ from epoch_creator import get_categories, get_events, create_event_ids, create_e
 
 class Preprocessor:
 
-    def __init__(self, raw, number_of_categories=None):
-        self.raw = raw
+    def __init__(self, number_of_categories=None):
         self.NUMBER_OF_IMAGES_PER_CATEGORY = 16
         self.LABEL_BEFORE_IMAGE_ONSET = 0
         self.BATCH_SIZE = 1024
@@ -21,42 +20,42 @@ class Preprocessor:
     # CAR - Spatial filtering 
     # Normalize
     
-    def run_pipeline(self, use_filter=True, use_ica=True, use_autoreject=True):
+    def run_pipeline(self, raw, use_filter=True, use_ica=True, use_autoreject=True):
         if use_filter:
-            self.filter()
+            self.filter(raw)
         if use_ica:
-            self.ica()
-        self.create_epochs()
+            self.ica(raw)
+        self.create_epochs(raw)
         if use_autoreject:
-           self.autoreject()
+           self.autoreject(raw)
 
-    def filter(self):
-        self.raw.load_data()
-        self.raw.filter(l_freq=1, h_freq=None)
-        self.raw.notch_filter(np.arange(50,251,50))
+    def filter(self, raw):
+        raw.load_data()
+        raw.filter(l_freq=1, h_freq=None)
+        raw.notch_filter(np.arange(50,251,50))
         print(f"Successfully filtered the data.")
-        return self.raw
+        return raw
 
-    def ica(self):
+    def ica(self, raw):
         ica = mne.preprocessing.ICA(n_components=20)
-        ica.fit(self.raw)
-        self.raw.load_data()
-        ica.apply(self.raw)
+        ica.fit(raw)
+        raw.load_data()
+        ica.apply(raw)
         print(f"Successfully ran ICA on the data.")
-        return self.raw
+        return raw
 
-    def create_epochs(self):
+    def create_epochs(self, raw):
 
-        self.events_arr, self.event_dict = get_events(self.raw)
+        self.events_arr, self.event_dict = get_events(raw)
 
         self.categories = get_categories(self.number_of_categories)
 
         self.event_ids = create_event_ids(self.event_dict, self.categories)
 
-        self.epochs = create_epochs(self.raw, self.events_arr, self.event_ids)
+        self.epochs = create_epochs(raw, self.events_arr, self.event_ids)
         self.epochs.resample(100)
 
-    def autoreject(self):
+    def autoreject(self, raw):
 
         """ar = autoreject.AutoReject(n_interpolate=[1, 4], random_state=11,
                                 n_jobs=-1, verbose=True)     
