@@ -6,130 +6,153 @@ from numpy.lib.stride_tricks import sliding_window_view
 from sklearn.decomposition import PCA
 from functions import (
     Database,
-    prep_data,
     BunDLeNet
 )
 from bundle_trainer import BunDLeTrainer
 from plot import plot_loss, plot_latent_timeseries, plot_phase_space, plot_ps_, plotting_neuronal_behavioural
+from processed_data_storage import ProcessedDataStroage
+from preprocess import Preprocessor
+
+state_names = [
+    "keine Kategorie",
+    "Gesicht",
+    "Tier",
+    "Ort",
+    "Objekt",
+    "Catch",
+]
+
+n_epochs = 20
+subjects_range = range(1, 8)
+
+processed_data_storage = ProcessedDataStroage()
+preprocessor = Preprocessor()
 
 
-def run_model():
-    data = Database()
+# processed_data_storage.preprocess_and_save_subjects_from_range(subjects_range)
+X_train, X_test, labels_train, labels_test, category_per_epoch_all_subs_train, category_per_epoch_all_subs_test = processed_data_storage.read_subjects_from_range(subjects_range)
 
-    time = data.fps
-    sys.path.append(r"../")
-    print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
+number_of_epochs, number_of_channels, number_of_time_points = X_train.shape
+print(f"X_train shape: {X_train.shape}")
+print(f"Number of epochs: {number_of_epochs}")
+print(f"Number of channels: {number_of_channels}")
 
-    X_full = data.neuron_traces.T.astype(np.float32, copy=False)
-    del data.neuron_traces
+# Alle Fensterpaare der Trainingsdaten (darauf wird trainiert)
+epoch_numbers, start_time_points = preprocessor.list_all_window_pairs(
+    number_of_epochs, number_of_time_points, preprocessor.WINDOW_LENGTH
+)
 
-    "training_samples = min(len(X_full), int(60 * data.fps))"
-    training_samples = len(X_full)
-    X = X_full[:training_samples]
-    B = data.B[:training_samples]
-    state_names = data.state_names
-    preview_step = max(1, (len(X) + 4999) // 5000)
+# Alle Fensterpaare der Testdaten (werden nur ausgewertet, nie trainiert)
+number_of_test_epochs = X_test.shape[0]
+number_of_test_time_points = X_test.shape[2]
+test_epoch_numbers, test_start_time_points = preprocessor.list_all_window_pairs(
+    number_of_test_epochs, number_of_test_time_points, preprocessor.WINDOW_LENGTH
+)
 
-    plotting_neuronal_behavioural(
-        X[::preview_step], B[::preview_step], state_names=state_names
-    )
-    plt.close("all")
+# Feste Zufallsauswahl an Trainingsfenstern, genauso viele wie Testfenster.
+# Auf dieser Auswahl messen wir nach jeder Trainingsepoche Loss und Genauigkeit
+# auf genau dieselbe Art wie auf den Testdaten.
+random_generator = np.random.default_rng(11)
+train_subset_indices = random_generator.choice(
+    len(epoch_numbers), size=len(test_epoch_numbers), replace=False
+)
+train_subset_epoch_numbers = epoch_numbers[train_subset_indices]
+train_subset_start_time_points = start_time_points[train_subset_indices]
 
-    ### Preprocess and prepare data for BundLe Net
-    X_paired, B_1 = prep_data(X, B, win=15)
+print(f"Trainingsfenster: {len(epoch_numbers)}, davon ausgewertet: {len(train_subset_epoch_numbers)}")
+print(f"Testfenster: {len(test_epoch_numbers)}")
 
-    # TODO: Rewrite timeseries_train_test_split so it returns only the train_idx and test_idx when given the X_paired matrix. Then, invoce train_model with X_paired, B_1, train_idx, ...
-    # and let it train the model with the idx and a view of the full matrix. This avoids creating 4 new matrices when calling the original timeseries_train_test_split
+# Zufallswert (reines Raten) als Vergleichslinie.
+# Das Ziel eines Fensterpaares ist das Label am Index start + WINDOW_LENGTH,
+# also frühestens am Index WINDOW_LENGTH. Davor liegende Labels kommen als Ziel nie vor.
+target_labels_that_can_occur = labels_train[:, preprocessor.WINDOW_LENGTH:]
+target_categories = np.unique(target_labels_that_can_occur)
+number_of_target_categories = len(target_categories)
+chance_loss = np.log(number_of_target_categories)
+chance_accuracy = 1 / number_of_target_categories
+print(f"Kategorien, die als Ziel vorkommen: {target_categories}")
+print(f"Raten ergibt Loss ln({number_of_target_categories}) = {chance_loss:.3f} und Genauigkeit {chance_accuracy:.2f}")
 
-    "X_train, X_test, B_train_1, B_test_1 = timeseries_train_test_split(X_paired, B_1)"
+start_time_in_seconds = -0.2                      
+sampling_rate_in_hertz = 100                
+times = start_time_in_seconds + np.arange(number_of_time_points) / sampling_rate_in_hertz
 
-    ### Deploy BunDLe Net
-    model = BunDLeNet(latent_dim=3)
+preview_step = max(1, (len(X_train) + 4999) // 5000)
 
-    # Erzeugt zunächst nur eine speichersparende Sicht auf die Daten.
-    _ = model(tf.convert_to_tensor(X_paired[:1], dtype=tf.float32))
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-    trainer = BunDLeTrainer(model, optimizer)
-    loss_array = trainer.train_model(
-        X_paired,
-        B_1,
-        model,
-        optimizer,
-        gamma=0.9,
-        n_epochs=10,
-        pca_init=False,
-        best_of_5_init=False,
-    )
+"""
+plotting_neuronal_behavioural(
+    X_train[::preview_step], labels_train[::preview_step], state_names=state_names
+)
+plt.close("all")
+"""
+### Preprocess and prepare data for BundLe Net
 
-    # Training losses vs epochs
-    plt.figure()
-    for i, label in enumerate(
-        [
-            "$\mathcal{L}_{{Markov}}$",
-            "$\mathcal{L}_{{Behavior}}$",
-            "Total loss $\mathcal{L}$",
-        ]
-    ):
-        plt.semilogy(loss_array[:, i], label=label)
-    plt.legend()
-    plt.show()
+# Modell hier neu anlegen: Wenn man nur diese Zelle erneut ausführt,
+# startet das Training von vorne statt mit dem alten Modell weiterzumachen.
+model = BunDLeNet(3)
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+trainer = BunDLeTrainer(model, optimizer)
+random = np.random.default_rng(11)
 
-    ### Projecting into latent space
-    # Project the complete recording below in bounded batches.
+bundle_trainer = BunDLeTrainer(model, optimizer)
+history_per_epoch, all_losses = bundle_trainer.train_model(X_train, labels_train, X_test, labels_test, epoch_numbers, start_time_points, random, n_epochs)
 
-    # Apply the trained model to the complete recording in bounded batches.
-    X_windows = sliding_window_view(
-        X_full,
-        window_shape=15,
-        axis=0,
-    ).transpose(
-        0, 2, 1
-    )[:-1]
-    B_full = data.B[15:]
+plot_loss(history_per_epoch, all_losses, chance_loss, number_of_target_categories, chance_accuracy, preprocessor.GAMMA)
 
-    Y0_full = np.empty((len(X_windows), model.latent_dim), dtype=np.float32)
-    batch_size = 4096
+### Projecting into latent space
+# Project the complete recording below in bounded batches.
+"""
+# Apply the trained model to the complete recording in bounded batches.
+X_windows = sliding_window_view(
+    X_train,
+    window_shape=15,
+    axis=0,
+).transpose(
+    0, 2, 1
+)[:-1]
+B_full = labels_train[15:]
 
-    for batch_number, start in enumerate(range(0, len(X_windows), batch_size), start=1):
-        stop = min(start + batch_size, len(X_windows))
-        batch = tf.convert_to_tensor(X_windows[start:stop], dtype=tf.float32)
-        Y0_full[start:stop] = model.tau(batch, training=False).numpy()
+Y0_full = np.empty((len(X_windows), model.latent_dim), dtype=np.float32)
+batch_size = 4096
 
-        if batch_number == 1 or batch_number % 100 == 0 or stop == len(X_windows):
-            print(f"Full-data inference: {stop}/{len(X_windows)} samples", flush=True)
+for batch_number, start in enumerate(range(0, len(X_windows), batch_size), start=1):
+    stop = min(start + batch_size, len(X_windows))
+    batch = tf.convert_to_tensor(X_windows[start:stop], dtype=tf.float32)
+    Y0_full[start:stop] = model.tau(batch, training=False).numpy()
 
-    Y0_ = Y0_full
-    print("Latent shape:", Y0_full.shape)
-    print("Labels shape:", B_full.shape)
+    if batch_number == 1 or batch_number % 100 == 0 or stop == len(X_windows):
+        print(f"Full-data inference: {stop}/{len(X_windows)} samples", flush=True)
 
-    algorithm = "BunDLeNet"
-    # ### Save the weights (Uncomment to save and load for for later use)
-    # model.save_weights('data/generated/BunDLeNet_model_worm_' + str(worm_num))
-    # np.savetxt('data/generated/saved_Y/Y0__' + algorithm + '_worm_' + str(worm_num), Y0_)
-    # np.savetxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num), B_)
-    # Y0_ = np.loadtxt('data/generated/saved_Y/Y0__' + algorithm + '_worm_' + str(worm_num))
-    # B_ = np.loadtxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num)).astype(int)
+Y0_ = Y0_full
+print("Latent shape:", Y0_full.shape)
+print("Labels shape:", B_full.shape)
 
-    ### Plotting latent space dynamics
-    plot_step = max(1, len(Y0_full) // 5000)
-    plot_latent_timeseries(Y0_[::plot_step], B_1[::plot_step], state_names)
-    plot_phase_space(
-        Y0_full[::plot_step],
-        B_full[::plot_step],
-        state_names=state_names,
-    )
-    # rotating_plot(Y0_, B_,filename='figures/rotation_'+ algorithm + '_worm_' +'.gif', state_names=state_names, legend=False)
+algorithm = "BunDLeNet"
+# ### Save the weights (Uncomment to save and load for for later use)
+# model.save_weights('data/generated/BunDLeNet_model_worm_' + str(worm_num))
+# np.savetxt('data/generated/saved_Y/Y0__' + algorithm + '_worm_' + str(worm_num), Y0_)
+# np.savetxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num), B_)
+# Y0_ = np.loadtxt('data/generated/saved_Y/Y0__' + algorithm + '_worm_' + str(worm_num))
+# B_ = np.loadtxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num)).astype(int)
 
-    ### Performing PCA on the latent dimension (to check if there are redundant or correlated components)
-    pca = PCA()
-    Y_pca = pca.fit_transform(Y0_)
-    plot_latent_timeseries(Y_pca[::plot_step], B_1[::plot_step], state_names)
+### Plotting latent space dynamics
+plot_step = max(1, len(Y0_full) // 5000)
+plot_latent_timeseries(Y0_[::plot_step], B_1[::plot_step], state_names)
+plot_phase_space(
+    Y0_full[::plot_step],
+    B_full[::plot_step],
+    state_names=state_names,
+)
+# rotating_plot(Y0_, B_,filename='figures/rotation_'+ algorithm + '_worm_' +'.gif', state_names=state_names, legend=False)
 
-    ### Recurrence plot analysis of embedding
-    # pd_Y = np.linalg.norm(Y0_[:, np.newaxis] - Y0_, axis=-1) < 0.8
-    # plt.matshow(pd_Y, cmap='Greys')
-    # plot_latent_timeseries(Y0_[::plot_step], B_[::plot_step], state_names)
-    # plt.show()
+### Performing PCA on the latent dimension (to check if there are redundant or correlated components)
+pca = PCA()
+Y_pca = pca.fit_transform(Y0_)
+plot_latent_timeseries(Y_pca[::plot_step], B_1[::plot_step], state_names)
 
-
-run_model()
+### Recurrence plot analysis of embedding
+# pd_Y = np.linalg.norm(Y0_[:, np.newaxis] - Y0_, axis=-1) < 0.8
+# plt.matshow(pd_Y, cmap='Greys')
+# plot_latent_timeseries(Y0_[::plot_step], B_[::plot_step], state_names)
+# plt.show()
+"""

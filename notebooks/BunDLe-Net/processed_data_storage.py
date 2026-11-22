@@ -24,6 +24,8 @@ class ProcessedDataStroage:
     def preprocess_and_save_subjects_from_range(self, subjects_range):
         for sub in subjects_range:
             subject = sub + 100
+            if subject == 106:
+                continue
             subject = str(subject)
             raw, _, _ = self.data_reader.read_data(
                 subject=str(subject),
@@ -53,6 +55,8 @@ class ProcessedDataStroage:
 
         for sub in subjects_range:
             subject = sub + 100
+            if subject == 106:
+                continue
             values = self.load_subject(subject)
             X_train.append(values[0])
             X_test.append(values[1])

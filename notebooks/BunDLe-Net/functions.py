@@ -8,6 +8,8 @@ from tensorflow.keras.models import Model
 from tensorflow.keras import layers
 from sklearn.neighbors import NearestNeighbors
 from sklearn.model_selection import KFold
+from preprocess import Preprocessor
+from processed_data_storage import ProcessedDataStroage
 
 #########################################
 ############## Loading Data #############
@@ -35,87 +37,15 @@ class Database:
 
     def __init__(self):
         data_reader = DataReader()
+        subjects_range = range(1, 3)
 
-        self.raw, self.channels, self.events = data_reader.read_data(
-            subject="101",
-            duration=60.0,
-        )
+        processed_data_storage = ProcessedDataStroage()
+        preprocessor = Preprocessor()
 
-        # EEG-Kanäle auswählen
-        eeg_picks = mne.pick_types(self.raw.info, eeg=True, exclude=[])
 
-        # Messwerte: (Kanäle, Zeitpunkte)
-        self.neuron_traces = self.raw.get_data(picks=eeg_picks)
-
-        # Kanalnamen in derselben Reihenfolge wie die Messwerte
-        self.channel_names = np.array(
-            [self.raw.ch_names[i] for i in eeg_picks], dtype=object
-        )
-
-        # Abtastrate der Aufnahme: bei dir 1000 Hz
-        self.fps = self.raw.info["sfreq"]
-
-        self.state_names = [
-            "keine Kategorie",
-            "Gesicht",
-            "Tier",
-            "Ort",
-            "Objekt",
-            "Catch",
-        ]
-
-        # images of faces = S1-16 images of animals = S17-32 images of places = S33-48 images of objects = S49-64 catch trials = S65-69
-        # button_press = S99 run_onset = S100+run_number (8 runs in total) run_end = S199
-
-        self.stimulus_to_state = {}
-
-        for code in range(1, 17):
-            self.stimulus_to_state[code] = 1  # Gesicht
-
-        for code in range(17, 33):
-            self.stimulus_to_state[code] = 2  # Tier
-
-        for code in range(33, 49):
-            self.stimulus_to_state[code] = 3  # Ort
-
-        for code in range(49, 65):
-            self.stimulus_to_state[code] = 4  # Objekt
-
-        for code in range(65, 70):
-            self.stimulus_to_state[code] = 5
-
-        labels = []
-        self.B = np.zeros(self.neuron_traces.shape[1], dtype=int)
-        for event in self.events:
-            code = self.extract_s(event["trial_type"])
-
-            if code in self.stimulus_to_state:
-                label = self.stimulus_to_state[code]
-            elif code == 199 or code in range(101, 109):
-                label = 0
-            else:
-                continue
-
-            sample = int(event["sample"])
-            labels.append((sample, label))
-
-        l = len(labels)
-
-        for e in range(l):
-            current_sample, label = labels[e]
-            if e + 1 < l:
-                next_sample = labels[e + 1][0]
-            else:
-                next_sample = l
-
-            self.B[current_sample:next_sample] = label
-
-    def extract_s(self, trial_type):
-        if not trial_type.startswith("Stimulus/S"):
-            return None
-
-        number = trial_type.removeprefix("Stimulus/S").strip()
-        return int(number)
+        processed_data_storage.preprocess_and_save_subjects_from_range(subjects_range)
+        X_train, X_test, labels_train, labels_test, category_per_epoch_all_subs_train, category_per_epoch_all_subs_test = processed_data_storage.read_subjects_from_range(subjects_range)
+        
 
 
 ########################################################
