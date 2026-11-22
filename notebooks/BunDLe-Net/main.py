@@ -7,16 +7,15 @@ from sklearn.decomposition import PCA
 from functions import (
     Database,
     prep_data,
-    BunDLeNet,
-    train_model,
-    plotting_neuronal_behavioural,
-    plot_latent_timeseries,
-    plot_phase_space,
+    BunDLeNet
 )
+from bundle_trainer import BunDLeTrainer
+from plot import plot_loss, plot_latent_timeseries, plot_phase_space, plot_ps_, plotting_neuronal_behavioural
 
 
 def run_model():
     data = Database()
+
     time = data.fps
     sys.path.append(r"../")
     print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
@@ -50,8 +49,8 @@ def run_model():
     # Erzeugt zunächst nur eine speichersparende Sicht auf die Daten.
     _ = model(tf.convert_to_tensor(X_paired[:1], dtype=tf.float32))
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-
-    loss_array = train_model(
+    trainer = BunDLeTrainer(model, optimizer)
+    loss_array = trainer.train_model(
         X_paired,
         B_1,
         model,
