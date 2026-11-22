@@ -98,4 +98,23 @@ Notes on the subjects of the study:
     
     
 \end{itemize}
+
+\section{Dataset}
+The dataset comes from the study "Healthy aging delays and dedifferentiates high-level
+visual representations". The set consists of 43 individuals, 21 young (19 - 33 years of age)
+and 22 older subjects (60 - 73 years of age). No participant had to be left out for the EEG dataset.
+The dataset consists of different trials corresponding to different image categories. 
+There are in total 4 different image categories grouped into two supra categories. 
+The categories are faces, animals, objects, places grouped into animate and inanimate respectefly. 
+There are in total 64 images which are each shown 32 times. So in total that amounts to 2048 trials. 
+Cath trials are made every 4-6 trials, showing an image of a smurf. The participants are instructed to 
+press a button and blink to complete this trial. 
+
+\section{Preprocessing}
+The study already implements a preprocessing pipeline which consits of a notch filter and a baseline
+correction. 
+In the open source code, which was used to produce the results used in the study, I could find some more 
+preprocessing being done. These steps are as follows: Rejection and interpolation of bad channels, subsampling
+to 200 Hz and MVNN.
+
 \end{document}
