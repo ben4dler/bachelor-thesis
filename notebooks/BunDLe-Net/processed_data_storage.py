@@ -31,7 +31,7 @@ class ProcessedDataStroage:
                 subject=str(subject),
             )
         
-            self.preprocessor.run_pipeline(raw, use_filter=True, use_ica=False, use_autoreject=False)
+            self.preprocessor.run_pipeline(raw, use_filter=True, use_ica=True, use_autoreject=True)
 
             del raw
 

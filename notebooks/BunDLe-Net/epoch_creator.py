@@ -64,7 +64,7 @@ def create_epochs(raw, events_arr, event_id):
         events_arr,
         event_id=event_id,
         tmin=-0.2,
-        tmax=1.0,
+        tmax=0.8,
         baseline=((-0.2, 0)),
         preload=True,
         event_repeated="drop",

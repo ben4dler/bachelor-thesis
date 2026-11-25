@@ -71,3 +71,9 @@ Desktop.ini
 
 # Recommended: compile into a dedicated directory
 /LaTeX/build/
+theory/LaTeX/main.aux
+theory/LaTeX/main.fdb_latexmk
+.gitignore
+theory/LaTeX/main.synctex.gz
+theory/LaTeX/main.fls
+theory/LaTeX/main.pdf

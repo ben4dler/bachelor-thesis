@@ -12,7 +12,7 @@ class Preprocessor:
         self.NUMBER_OF_IMAGES_PER_CATEGORY = 16
         self.LABEL_BEFORE_IMAGE_ONSET = 0
         self.BATCH_SIZE = 1024
-        self.GAMMA = 0.7
+        self.GAMMA = 0.0
         self.WINDOW_LENGTH = 15
         self.number_of_categories = number_of_categories
 
@@ -99,11 +99,12 @@ class Preprocessor:
     def create_labels_for_epochs(self, epochs):
 
         image_numbers = epochs.events[:, 2]
-
+        print(image_numbers)
+        
         category_per_epoch = (
             image_numbers - 1
         ) // self.NUMBER_OF_IMAGES_PER_CATEGORY + 1
-
+        
         number_of_epochs = len(epochs)
         number_of_time_points = len(epochs.times)
         labels = np.full(

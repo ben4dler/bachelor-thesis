@@ -1,15 +1,20 @@
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from numpy.lib.stride_tricks import sliding_window_view
 from sklearn.decomposition import PCA
 from functions import (
-    Database,
     BunDLeNet
 )
 from bundle_trainer import BunDLeTrainer
-from plot import plot_loss, plot_latent_timeseries, plot_phase_space, plot_ps_, plotting_neuronal_behavioural
+from plot import (
+    plot_loss,
+    plot_latent_timeseries,
+    plot_phase_space,
+    plot_mean_trajectories,
+    plot_recurrence,
+    plotting_neuronal_behavioural,
+)
 from processed_data_storage import ProcessedDataStroage
 from preprocess import Preprocessor
 
@@ -22,14 +27,14 @@ state_names = [
     "Catch",
 ]
 
-n_epochs = 20
-subjects_range = range(1, 8)
+n_epochs = 5
+subjects_range = range(1, 2)
 
 processed_data_storage = ProcessedDataStroage()
 preprocessor = Preprocessor()
 
 
-# processed_data_storage.preprocess_and_save_subjects_from_range(subjects_range)
+processed_data_storage.preprocess_and_save_subjects_from_range(subjects_range)
 X_train, X_test, labels_train, labels_test, category_per_epoch_all_subs_train, category_per_epoch_all_subs_test = processed_data_storage.read_subjects_from_range(subjects_range)
 
 number_of_epochs, number_of_channels, number_of_time_points = X_train.shape
@@ -77,18 +82,11 @@ start_time_in_seconds = -0.2
 sampling_rate_in_hertz = 100                
 times = start_time_in_seconds + np.arange(number_of_time_points) / sampling_rate_in_hertz
 
-preview_step = max(1, (len(X_train) + 4999) // 5000)
-
-"""
 plotting_neuronal_behavioural(
-    X_train[::preview_step], labels_train[::preview_step], state_names=state_names
+    X_train, labels_train, state_names=state_names, max_epochs=20
 )
 plt.close("all")
-"""
-### Preprocess and prepare data for BundLe Net
 
-# Modell hier neu anlegen: Wenn man nur diese Zelle erneut ausführt,
-# startet das Training von vorne statt mit dem alten Modell weiterzumachen.
 model = BunDLeNet(3)
 optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
 trainer = BunDLeTrainer(model, optimizer)
@@ -100,32 +98,33 @@ history_per_epoch, all_losses = bundle_trainer.train_model(X_train, labels_train
 plot_loss(history_per_epoch, all_losses, chance_loss, number_of_target_categories, chance_accuracy, preprocessor.GAMMA)
 
 ### Projecting into latent space
-# Project the complete recording below in bounded batches.
-"""
-# Apply the trained model to the complete recording in bounded batches.
-X_windows = sliding_window_view(
-    X_train,
-    window_shape=15,
-    axis=0,
-).transpose(
-    0, 2, 1
-)[:-1]
-B_full = labels_train[15:]
+# tau wurde auf Fenstern der Form (WINDOW_LENGTH, Kanäle) trainiert, die innerhalb
+# einer Epoche entlang der Zeitachse liegen (siehe Preprocessor.build_training_batch).
+# Genauso projizieren wir hier: für jede Epoche jedes Fenster, das bei s beginnt.
+# Ergebnis pro Epoche: (Anzahl Fenster, latent_dim), Label = Label am letzten Zeitpunkt des Fensters.
+def project_epochs(model, eeg_data, window_length, epochs_per_batch=64):
+    number_of_epochs, number_of_channels, number_of_time_points = eeg_data.shape
+    number_of_windows = number_of_time_points - window_length + 1
+    Y = np.empty((number_of_epochs, number_of_windows, model.latent_dim), dtype=np.float32)
 
-Y0_full = np.empty((len(X_windows), model.latent_dim), dtype=np.float32)
-batch_size = 4096
+    for start in range(0, number_of_epochs, epochs_per_batch):
+        stop = min(start + epochs_per_batch, number_of_epochs)
+        # (E, Kanäle, Zeit) -> (E, Kanäle, Fenster, Fensterlänge)
+        windows = sliding_window_view(eeg_data[start:stop], window_length, axis=2)
+        # -> (E, Fenster, Fensterlänge, Kanäle) -> (E*Fenster, Fensterlänge, Kanäle)
+        windows = windows.transpose(0, 2, 3, 1).reshape(-1, window_length, number_of_channels)
+        latent = model.tau(tf.convert_to_tensor(windows, dtype=tf.float32), training=False).numpy()
+        Y[start:stop] = latent.reshape(stop - start, number_of_windows, model.latent_dim)
+    return Y
 
-for batch_number, start in enumerate(range(0, len(X_windows), batch_size), start=1):
-    stop = min(start + batch_size, len(X_windows))
-    batch = tf.convert_to_tensor(X_windows[start:stop], dtype=tf.float32)
-    Y0_full[start:stop] = model.tau(batch, training=False).numpy()
 
-    if batch_number == 1 or batch_number % 100 == 0 or stop == len(X_windows):
-        print(f"Full-data inference: {stop}/{len(X_windows)} samples", flush=True)
-
-Y0_ = Y0_full
-print("Latent shape:", Y0_full.shape)
-print("Labels shape:", B_full.shape)
+window_length = preprocessor.WINDOW_LENGTH
+Y_train = project_epochs(model, X_train, window_length)
+Y_test = project_epochs(model, X_test, window_length)
+B_train = labels_train[:, window_length - 1:].astype(int)
+B_test = labels_test[:, window_length - 1:].astype(int)
+print("Latent shape (Training):", Y_train.shape, "Labels:", B_train.shape)
+print("Latent shape (Test):", Y_test.shape, "Labels:", B_test.shape)
 
 algorithm = "BunDLeNet"
 # ### Save the weights (Uncomment to save and load for for later use)
@@ -136,23 +135,29 @@ algorithm = "BunDLeNet"
 # B_ = np.loadtxt('data/generated/saved_Y/B__' + algorithm + '_worm_' + str(worm_num)).astype(int)
 
 ### Plotting latent space dynamics
-plot_step = max(1, len(Y0_full) // 5000)
-plot_latent_timeseries(Y0_[::plot_step], B_1[::plot_step], state_names)
-plot_phase_space(
-    Y0_full[::plot_step],
-    B_full[::plot_step],
-    state_names=state_names,
-)
-# rotating_plot(Y0_, B_,filename='figures/rotation_'+ algorithm + '_worm_' +'.gif', state_names=state_names, legend=False)
+plot_latent_timeseries(Y_train, B_train, state_names, max_epochs=20, title="Latenter Raum (Training)")
+plot_phase_space(Y_train, B_train, state_names=state_names, max_epochs=200, title="Trajektorien (Training)")
+plot_phase_space(Y_test, B_test, state_names=state_names, max_epochs=200, title="Trajektorien (Test)")
+plot_mean_trajectories(Y_train, category_per_epoch_all_subs_train, state_names, title="Mittlere Trajektorie pro Kategorie (Training)")
+plot_mean_trajectories(Y_test, category_per_epoch_all_subs_test, state_names, title="Mittlere Trajektorie pro Kategorie (Test)")
+# rotating_plot(Y_train, B_train, filename='figures/rotation_' + algorithm + '.gif', state_names=state_names, legend=False)
 
 ### Performing PCA on the latent dimension (to check if there are redundant or correlated components)
 pca = PCA()
-Y_pca = pca.fit_transform(Y0_)
-plot_latent_timeseries(Y_pca[::plot_step], B_1[::plot_step], state_names)
+Y_pca = pca.fit_transform(Y_train.reshape(-1, model.latent_dim)).reshape(Y_train.shape)
+print("Erklärte Varianz der PCA-Komponenten:", np.round(pca.explained_variance_ratio_, 3))
+plot_latent_timeseries(Y_pca, B_train, state_names, max_epochs=20, title="PCA des latenten Raums (Training)")
 
 ### Recurrence plot analysis of embedding
-# pd_Y = np.linalg.norm(Y0_[:, np.newaxis] - Y0_, axis=-1) < 0.8
-# plt.matshow(pd_Y, cmap='Greys')
-# plot_latent_timeseries(Y0_[::plot_step], B_[::plot_step], state_names)
-# plt.show()
-"""
+# Nur eine Stichprobe: pro Kategorie 10 Epochen, jeder 4. Zeitpunkt
+# -> 4 * 10 * 27 = 1080 Zustände, Distanzmatrix ca. 9 MB statt (Epochen*Zeit)^2.
+recurrence_train, category_recurrence_train, epsilon_train = plot_recurrence(
+    Y_train, B_train, category_per_epoch_all_subs_train, state_names,
+    epochs_per_category=10, time_step=4, recurrence_rate=0.1,
+    title="Rekurrenzanalyse des latenten Raums (Training)",
+)
+recurrence_test, category_recurrence_test, epsilon_test = plot_recurrence(
+    Y_test, B_test, category_per_epoch_all_subs_test, state_names,
+    epochs_per_category=10, time_step=4, recurrence_rate=0.1,
+    title="Rekurrenzanalyse des latenten Raums (Test)",
+)
