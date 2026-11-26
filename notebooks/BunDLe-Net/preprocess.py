@@ -12,7 +12,7 @@ class Preprocessor:
         self.NUMBER_OF_IMAGES_PER_CATEGORY = 16
         self.LABEL_BEFORE_IMAGE_ONSET = 0
         self.BATCH_SIZE = 1024
-        self.GAMMA = 0.0
+        self.GAMMA = 0.7
         self.WINDOW_LENGTH = 15
         self.number_of_categories = number_of_categories
 
@@ -99,7 +99,6 @@ class Preprocessor:
     def create_labels_for_epochs(self, epochs):
 
         image_numbers = epochs.events[:, 2]
-        print(image_numbers)
         
         category_per_epoch = (
             image_numbers - 1
@@ -135,6 +134,32 @@ class Preprocessor:
                 start_time_points.append(start_time_point)
 
         return np.array(epoch_numbers), np.array(start_time_points)
+
+    def build_window_features(self, eeg_data, window_length):
+        """Rohfenster als Features für einen SlidingEstimator.
+
+        Nimmt pro Startpunkt dasselbe Fenster, das tau sieht (das zweite Fenster
+        aus build_training_batch: start + 1 ... start + window_length) und legt
+        Kanäle und Zeit zu einem Feature-Vektor zusammen.
+
+        Eingabe:  (Epochen, Kanäle, Zeitpunkte)
+        Rückgabe: (Epochen, Kanäle * window_length, Zeitpunkte - window_length)
+        Die letzte Achse hat damit genau so viele Positionen wie die tau-Werte,
+        und Position p gehört zum Zeitpunkt times[window_length + p].
+        """
+        number_of_epochs, number_of_channels, number_of_time_points = eeg_data.shape
+        number_of_start_points = number_of_time_points - window_length
+
+        windows = []
+        for start_time_point in range(number_of_start_points):
+            second_window = eeg_data[
+                :, :, start_time_point + 1 : start_time_point + window_length + 1
+            ]
+            windows.append(
+                second_window.reshape(number_of_epochs, number_of_channels * window_length)
+            )
+
+        return np.stack(windows, axis=2)
 
     def build_training_batch(
         self, eeg_data, labels, epoch_numbers, start_time_points, window_length
